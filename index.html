@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <!-- スマホでの拡大縮小やスクロールを抑止 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Slime Bomber</title>
+  <style>
+    /* 全体リセット＆背景 */
+    body, html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #000;
+    }
+    body {
+      font-family: 'Press Start 2P', monospace;
+      color: #fff;
+    }
+    /* 各画面共通 */
+    .screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background-color: #222;
+    }
+    /* タイトル画面：背景画像差し替え可能 */
+    #titleScreen {
+      background-image: url('title_bg.png');
+      background-size: cover;
+      background-position: center;
+    }
+    #titleScreen h1 {
+      font-size: 72px;  /* 前回の約3倍に拡大 */
+      letter-spacing: 4px;
+      margin-bottom: 20px;
+    }
+    #titleScreen button,
+    #difficultyScreen button,
+    #gameOverScreen button {
+      font-size: 18px;
+      padding: 10px 20px;
+      margin: 10px;
+      cursor: pointer;
+    }
+    /* ゲーム画面：HUD */
+    #hud {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 18px;
+      z-index: 10;
+    }
+    /* もぐらグリッド（3×3） */
+    #moleGrid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 5px;
+      width: 90vw;
+      height: 60vh;
+    }
+    /* モグラ穴：パネルではなく、丸い穴（後から画像に差し替え可） */
+    .moleHole {
+      background-color: #555;
+      border: 1px solid #333;
+      border-radius: 50%;
+      position: relative;
+      overflow: hidden;
+    }
+    /* モグラの基本スタイル：穴の底からアニメーションで上がってくる */
+    .mole {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      background-size: cover;
+      /* せり上がりアニメーション */
+      animation: moleRise 0.3s ease-out forwards;
+    }
+    @keyframes moleRise {
+      0% { transform: translateY(100%); }
+      100% { transform: translateY(0); }
+    }
+    /* 各モグラタイプの仮の色分け */
+    .normal      { background-color: green; }
+    .bonus       { background-color: blue; }
+    .miss        { background-color: red; }
+    .timePenalty { background-color: purple; }
+    .jackpot     { background-color: gold; }
+    
+    /* タッチ時の効果表示用：モグラの効果（＋10点など）を浮かび上がらせる */
+    .scoreEffect {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 20px;
+      color: #fff;
+      opacity: 1;
+      pointer-events: none;
+      animation: scoreEffectAnim 1s forwards;
+    }
+    @keyframes scoreEffectAnim {
+      0% { opacity: 1; transform: translate(-50%, -50%); }
+      100% { opacity: 0; transform: translate(-50%, -100%); }
+    }
+    
+    /* レジェンド（プレイ画面下部） */
+    #legend {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .legendItem {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(0,0,0,0.5);
+      padding: 5px 10px;
+      border-radius: 5px;
+    }
+    .legendIcon {
+      width: 20px;
+      height: 20px;
+      border: 1px solid #fff;
+    }
+    .legendIcon.normal      { background-color: green; }
+    .legendIcon.bonus       { background-color: blue; }
+    .legendIcon.miss        { background-color: red; }
+    .legendIcon.timePenalty { background-color: purple; }
+    .legendIcon.jackpot     { background-color: gold; }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <!-- タイトル画面 -->
+    <div id="titleScreen" class="screen">
+      <h1>SLIME BOMBER</h1>
+      <button id="startButton">Start</button>
+    </div>
+    <!-- 難易度選択画面 -->
+    <div id="difficultyScreen" class="screen" style="display: none;">
+      <h2>Select Difficulty</h2>
+      <button data-difficulty="easy">かんたん</button>
+      <button data-difficulty="normal">ふつう</button>
+      <button data-difficulty="difficult">むずかしい</button>
+    </div>
+    <!-- ゲーム画面 -->
+    <div id="gameScreen" class="screen" style="display: none; flex-direction: column;">
+      <div id="hud">
+        <div>Time: <span id="timeRemaining">30</span>s</div>
+        <div>Score: <span id="score">0</span></div>
+      </div>
+      <div id="moleGrid">
+        <!-- 9個の穴 -->
+        <div class="moleHole" data-index="0"></div>
+        <div class="moleHole" data-index="1"></div>
+        <div class="moleHole" data-index="2"></div>
+        <div class="moleHole" data-index="3"></div>
+        <div class="moleHole" data-index="4"></div>
+        <div class="moleHole" data-index="5"></div>
+        <div class="moleHole" data-index="6"></div>
+        <div class="moleHole" data-index="7"></div>
+        <div class="moleHole" data-index="8"></div>
+      </div>
+      <!-- 下部にレジェンド表示 -->
+      <div id="legend"></div>
+    </div>
+    <!-- ゲームオーバー画面 -->
+    <div id="gameOverScreen" class="screen" style="display: none;">
+      <h2>Game Over</h2>
+      <p>Your score: <span id="finalScore">0</span></p>
+      <button id="restartButton">Return to Title</button>
+    </div>
+  </div>
+  
+  <script>
+    // スマホでのスクロール／タッチ移動を防止
+    document.addEventListener('touchmove', function(e) {
+      e.preventDefault();
+    }, { passive: false });
+    
+    // ゲーム設定
+    const gameConfig = {
+      duration: 30, // 30秒
+      // 難易度毎のモグラ種類（easy: normalのみ、normal: normal, bonus, miss、difficult: normal, bonus, miss, timePenalty, jackpot）
+      moleTypes: {
+        easy: ['normal'],
+        normal: ['normal', 'bonus', 'miss'],
+        difficult: ['normal', 'bonus', 'miss', 'timePenalty', 'jackpot']
+      },
+      // 各効果の得点／数値
+      scores: {
+        normal: 10,
+        bonus: 20,
+        miss: -5,
+        jackpot: 100
+      },
+      timePenaltyAmount: 3, // タイムマイナスは3秒減
+      jackpotDuration: 1000  // 大当たりは出現時間1秒固定
+    };
+    
+    // レジェンド表示用テキスト
+    const moleLegend = {
+      normal: "+10点",
+      bonus: "+20点",
+      miss: "-5点",
+      timePenalty: "-3秒",
+      jackpot: "+100点 (一回のみ)"
+    };
+    
+    const gameState = {
+      timer: null,
+      timeRemaining: gameConfig.duration,
+      score: 0,
+      difficulty: null,
+      moleTimer: null,
+      jackpotUsed: false
+    };
+    
+    // DOM要素取得
+    const titleScreen = document.getElementById('titleScreen');
+    const startButton = document.getElementById('startButton');
+    const difficultyScreen = document.getElementById('difficultyScreen');
+    const gameScreen = document.getElementById('gameScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const restartButton = document.getElementById('restartButton');
+    const timeRemainingEl = document.getElementById('timeRemaining');
+    const scoreEl = document.getElementById('score');
+    const finalScoreEl = document.getElementById('finalScore');
+    const moleGrid = document.getElementById('moleGrid');
+    const moleHoles = document.querySelectorAll('.moleHole');
+    const legendDiv = document.getElementById('legend');
+    
+    // オーディオ（仮ファイル名：後から素材を用意してください）
+    const bgm = new Audio('bgm.mp3');
+    bgm.loop = true;
+    const hitSound = new Audio('hit.mp3');
+    
+    // タイトル画面 → 難易度選択画面へ
+    startButton.addEventListener('click', () => {
+      titleScreen.style.display = 'none';
+      difficultyScreen.style.display = 'flex';
+    });
+    
+    // 難易度選択処理
+    difficultyScreen.querySelectorAll('button').forEach(button => {
+      button.addEventListener('click', function() {
+        gameState.difficulty = this.getAttribute('data-difficulty');
+        difficultyScreen.style.display = 'none';
+        startGame();
+      });
+    });
+    
+    // リスタート処理（ゲームオーバー後）
+    restartButton.addEventListener('click', () => {
+      gameOverScreen.style.display = 'none';
+      titleScreen.style.display = 'flex';
+    });
+    
+    // ゲーム開始
+    function startGame() {
+      gameState.timeRemaining = gameConfig.duration;
+      gameState.score = 0;
+      gameState.jackpotUsed = false;
+      timeRemainingEl.textContent = gameState.timeRemaining;
+      scoreEl.textContent = gameState.score;
+      
+      gameScreen.style.display = 'flex';
+      
+      // ユーザー操作による再生トリガー
+      bgm.currentTime = 0;
+      bgm.play();
+      
+      // レジェンド更新（難易度に応じた項目のみ表示）
+      updateLegend();
+      
+      // タイマー開始（1秒ごとに減算）
+      gameState.timer = setInterval(() => {
+        gameState.timeRemaining--;
+        timeRemainingEl.textContent = gameState.timeRemaining;
+        if (gameState.timeRemaining <= 0) {
+          endGame();
+        }
+      }, 1000);
+      
+      // もぐら出現開始
+      if (gameState.difficulty === 'easy') {
+        gameState.moleTimer = setInterval(spawnMole, 1000);
+      } else {
+        spawnMoleRandom();
+      }
+    }
+    
+    // ゲーム終了処理
+    function endGame() {
+      clearInterval(gameState.timer);
+      clearTimeout(gameState.moleTimer);
+      // 残ったもぐらを全て除去
+      moleHoles.forEach(hole => {
+        hole.innerHTML = '';
+      });
+      gameScreen.style.display = 'none';
+      finalScoreEl.textContent = gameState.score;
+      gameOverScreen.style.display = 'flex';
+      bgm.pause();
+    }
+    
+    // 簡単モード用：一定間隔で出現
+    function spawnMole() {
+      const availableHoles = Array.from(moleHoles).filter(hole => hole.innerHTML === '');
+      if (availableHoles.length === 0) return;
+      const hole = availableHoles[Math.floor(Math.random() * availableHoles.length)];
+      const moleType = 'normal';
+      const displayTime = getDisplayTime(moleType);
+      showMole(hole, moleType, displayTime);
+    }
+    
+    // 通常・難しいモード用：ランダム間隔で出現
+    function spawnMoleRandom() {
+      const interval = Math.random() * 1000 + 500;
+      gameState.moleTimer = setTimeout(() => {
+        const availableHoles = Array.from(moleHoles).filter(hole => hole.innerHTML === '');
+        if (availableHoles.length > 0) {
+          const hole = availableHoles[Math.floor(Math.random() * availableHoles.length)];
+          const moleType = chooseMoleType();
+          const displayTime = getDisplayTime(moleType);
+          showMole(hole, moleType, displayTime);
+        }
+        spawnMoleRandom();
+      }, interval);
+    }
+    
+    // 難易度に応じたモグラタイプ選択（difficultの場合、大当たりは一回のみ）
+    function chooseMoleType() {
+      let types = [];
+      if (gameState.difficulty === 'normal') {
+        types = gameConfig.moleTypes.normal;
+      } else if (gameState.difficulty === 'difficult') {
+        types = gameConfig.moleTypes.difficult;
+        if (gameState.jackpotUsed) {
+          types = types.filter(type => type !== 'jackpot');
+        }
+      }
+      const index = Math.floor(Math.random() * types.length);
+      return types[index];
+    }
+    
+    // 各モグラタイプに応じた表示時間（ms）
+    function getDisplayTime(type) {
+      if (gameState.difficulty === 'easy') {
+        return 1200;
+      } else if (gameState.difficulty === 'normal') {
+        if (type === 'normal') return Math.random() * 600 + 1200;
+        if (type === 'bonus')  return Math.random() * 500 + 1500;
+        if (type === 'miss')   return Math.random() * 400 + 800;
+      } else if (gameState.difficulty === 'difficult') {
+        if (type === 'normal')      return Math.random() * 500 + 1000;
+        if (type === 'bonus')       return Math.random() * 500 + 1200;
+        if (type === 'miss')        return Math.random() * 500 + 800;
+        if (type === 'timePenalty') return Math.random() * 400 + 900;
+        if (type === 'jackpot')     return gameConfig.jackpotDuration;
+      }
+      return 1000;
+    }
+    
+    // 指定の穴にモグラを表示（アニメーション付き）
+    function showMole(hole, type, duration) {
+      const mole = document.createElement('div');
+      mole.classList.add('mole', type);
+      mole.setAttribute('data-type', type);
+      hole.appendChild(mole);
+      
+      // タッチ／クリックでモグラを叩く
+      mole.addEventListener('touchstart', moleHit);
+      mole.addEventListener('click', moleHit);
+      
+      // 指定時間経過で自動消去（未タッチ時）
+      setTimeout(() => {
+        if (hole.contains(mole)) {
+          hole.removeChild(mole);
+        }
+      }, duration);
+    }
+    
+    // モグラをタッチした際の処理：効果反映＋浮動テキスト表示
+    function moleHit(e) {
+      e.stopPropagation();
+      const mole = e.currentTarget;
+      const type = mole.getAttribute('data-type');
+      
+      if (type === 'normal') {
+        gameState.score += gameConfig.scores.normal;
+      } else if (type === 'bonus') {
+        gameState.score += gameConfig.scores.bonus;
+      } else if (type === 'miss') {
+        gameState.score += gameConfig.scores.miss;
+      } else if (type === 'timePenalty') {
+        gameState.timeRemaining = Math.max(0, gameState.timeRemaining - gameConfig.timePenaltyAmount);
+        document.getElementById('timeRemaining').textContent = gameState.timeRemaining;
+      } else if (type === 'jackpot') {
+        gameState.score += gameConfig.scores.jackpot;
+        gameState.jackpotUsed = true;
+      }
+      scoreEl.textContent = gameState.score;
+      
+      // 効果音再生
+      hitSound.currentTime = 0;
+      hitSound.play();
+      
+      // 効果（得点・タイムマイナスなど）のテキストを浮かび上がらせる
+      const effectText = getEffectText(type);
+      const scoreEffect = document.createElement('div');
+      scoreEffect.classList.add('scoreEffect');
+      scoreEffect.textContent = effectText;
+      mole.parentElement.appendChild(scoreEffect);
+      
+      // タッチされたらモグラは消去
+      const parentHole = mole.parentElement;
+      if (parentHole) {
+        parentHole.removeChild(mole);
+      }
+    }
+    
+    // モグラタイプ毎の効果テキスト
+    function getEffectText(type) {
+      if (type === 'normal')      return "+10点";
+      if (type === 'bonus')       return "+20点";
+      if (type === 'miss')        return "-5点";
+      if (type === 'timePenalty') return "-3秒";
+      if (type === 'jackpot')     return "+100点";
+      return "";
+    }
+    
+    // レジェンド更新：プレイ画面下部に、使用されるモグラ効果をアイコン＋テキストで表示
+    function updateLegend() {
+      let types = [];
+      if (gameState.difficulty === 'easy') {
+        types = ['normal'];
+      } else if (gameState.difficulty === 'normal') {
+        types = ['normal', 'bonus', 'miss'];
+      } else if (gameState.difficulty === 'difficult') {
+        types = ['normal', 'bonus', 'miss', 'timePenalty', 'jackpot'];
+      }
+      legendDiv.innerHTML = "";
+      types.forEach(type => {
+        const item = document.createElement('div');
+        item.classList.add('legendItem');
+        const icon = document.createElement('div');
+        icon.classList.add('legendIcon', type);
+        const text = document.createElement('span');
+        text.textContent = moleLegend[type];
+        item.appendChild(icon);
+        item.appendChild(text);
+        legendDiv.appendChild(item);
+      });
+    }
+  </script>
+</body>
+</html>

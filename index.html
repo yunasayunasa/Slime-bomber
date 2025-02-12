@@ -37,7 +37,7 @@
       background-position: center;
     }
     #titleScreen h1 {
-      font-size: 72px;  /* 前回の約3倍に拡大 */
+      font-size: 72px;  /* ロゴを大きく */
       letter-spacing: 4px;
       margin-bottom: 20px;
     }
@@ -66,7 +66,7 @@
       width: 90vw;
       height: 60vh;
     }
-    /* モグラ穴：パネルではなく、丸い穴（後から画像に差し替え可） */
+    /* モグラ穴：丸い穴（後から画像に差し替え可） */
     .moleHole {
       background-color: #555;
       border: 1px solid #333;
@@ -74,14 +74,13 @@
       position: relative;
       overflow: hidden;
     }
-    /* モグラの基本スタイル：穴の底からアニメーションで上がってくる */
+    /* モグラ：穴の底からアニメーションで上がってくる */
     .mole {
       position: absolute;
       bottom: 0;
       width: 100%;
       height: 100%;
       background-size: cover;
-      /* せり上がりアニメーション */
       animation: moleRise 0.3s ease-out forwards;
     }
     @keyframes moleRise {
@@ -95,7 +94,7 @@
     .timePenalty { background-color: purple; }
     .jackpot     { background-color: gold; }
     
-    /* タッチ時の効果表示用：モグラの効果（＋10点など）を浮かび上がらせる */
+    /* タッチ時の効果表示用：浮かび上がる得点テキスト */
     .scoreEffect {
       position: absolute;
       left: 50%;
@@ -189,27 +188,81 @@
       e.preventDefault();
     }, { passive: false });
     
-    // ゲーム設定
+    /* ---------------
+       サウンド生成（Web Audio API 利用）
+       ---------------
+       ・AudioContext を用いて、BGMおよびヒット音を生成します。
+       ・BGMは単純なループメロディ、ヒット音は短いビープです。
+    */
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let bgmPlaying = false;
+    let bgmIndex = 0;
+    // BGM用のシンプルなメロディ（周波数は 8 ビット風）
+    const bgmNotes = [
+      {freq: 261.63, duration: 0.4},  // C4
+      {freq: 293.66, duration: 0.4},  // D4
+      {freq: 329.63, duration: 0.4},  // E4
+      {freq: 349.23, duration: 0.4}   // F4
+    ];
+    
+    function playNextBgmNote() {
+      if (!bgmPlaying) return;
+      const note = bgmNotes[bgmIndex];
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      osc.frequency.value = note.freq;
+      osc.type = "square";
+      gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      osc.start();
+      osc.stop(audioCtx.currentTime + note.duration);
+      bgmIndex = (bgmIndex + 1) % bgmNotes.length;
+      setTimeout(playNextBgmNote, note.duration * 1000);
+    }
+    
+    function startBGM() {
+      bgmPlaying = true;
+      bgmIndex = 0;
+      playNextBgmNote();
+    }
+    
+    function stopBGM() {
+      bgmPlaying = false;
+    }
+    
+    function playHitSound() {
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      osc.frequency.value = 600;
+      osc.type = "square";
+      gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.1);
+    }
+    
+    /* ----------------------
+       ゲーム設定・状態管理
+    ---------------------- */
     const gameConfig = {
       duration: 30, // 30秒
-      // 難易度毎のモグラ種類（easy: normalのみ、normal: normal, bonus, miss、difficult: normal, bonus, miss, timePenalty, jackpot）
       moleTypes: {
         easy: ['normal'],
         normal: ['normal', 'bonus', 'miss'],
         difficult: ['normal', 'bonus', 'miss', 'timePenalty', 'jackpot']
       },
-      // 各効果の得点／数値
       scores: {
         normal: 10,
         bonus: 20,
         miss: -5,
         jackpot: 100
       },
-      timePenaltyAmount: 3, // タイムマイナスは3秒減
-      jackpotDuration: 1000  // 大当たりは出現時間1秒固定
+      timePenaltyAmount: 3, // -3秒
+      jackpotDuration: 1000  // 1秒
     };
     
-    // レジェンド表示用テキスト
     const moleLegend = {
       normal: "+10点",
       bonus: "+20点",
@@ -227,7 +280,7 @@
       jackpotUsed: false
     };
     
-    // DOM要素取得
+    // DOM要素の取得
     const titleScreen = document.getElementById('titleScreen');
     const startButton = document.getElementById('startButton');
     const difficultyScreen = document.getElementById('difficultyScreen');
@@ -241,13 +294,12 @@
     const moleHoles = document.querySelectorAll('.moleHole');
     const legendDiv = document.getElementById('legend');
     
-    // オーディオ（仮ファイル名：後から素材を用意してください）
-    const bgm = new Audio('bgm.mp3');
-    bgm.loop = true;
-    const hitSound = new Audio('hit.mp3');
-    
     // タイトル画面 → 難易度選択画面へ
     startButton.addEventListener('click', () => {
+      // ユーザー操作で AudioContext 再開
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
       titleScreen.style.display = 'none';
       difficultyScreen.style.display = 'flex';
     });
@@ -276,15 +328,13 @@
       scoreEl.textContent = gameState.score;
       
       gameScreen.style.display = 'flex';
+      // BGM開始（Web Audio API により生成）
+      startBGM();
       
-      // ユーザー操作による再生トリガー
-      bgm.currentTime = 0;
-      bgm.play();
-      
-      // レジェンド更新（難易度に応じた項目のみ表示）
+      // レジェンド更新
       updateLegend();
       
-      // タイマー開始（1秒ごとに減算）
+      // タイマー開始（1秒ごと）
       gameState.timer = setInterval(() => {
         gameState.timeRemaining--;
         timeRemainingEl.textContent = gameState.timeRemaining;
@@ -305,19 +355,19 @@
     function endGame() {
       clearInterval(gameState.timer);
       clearTimeout(gameState.moleTimer);
-      // 残ったもぐらを全て除去
+      // 残っているもぐら・効果テキストを除去
       moleHoles.forEach(hole => {
         hole.innerHTML = '';
       });
       gameScreen.style.display = 'none';
       finalScoreEl.textContent = gameState.score;
       gameOverScreen.style.display = 'flex';
-      bgm.pause();
+      stopBGM();
     }
     
     // 簡単モード用：一定間隔で出現
     function spawnMole() {
-      const availableHoles = Array.from(moleHoles).filter(hole => hole.innerHTML === '');
+      const availableHoles = Array.from(moleHoles).filter(hole => !hole.querySelector('.mole'));
       if (availableHoles.length === 0) return;
       const hole = availableHoles[Math.floor(Math.random() * availableHoles.length)];
       const moleType = 'normal';
@@ -329,7 +379,7 @@
     function spawnMoleRandom() {
       const interval = Math.random() * 1000 + 500;
       gameState.moleTimer = setTimeout(() => {
-        const availableHoles = Array.from(moleHoles).filter(hole => hole.innerHTML === '');
+        const availableHoles = Array.from(moleHoles).filter(hole => !hole.querySelector('.mole'));
         if (availableHoles.length > 0) {
           const hole = availableHoles[Math.floor(Math.random() * availableHoles.length)];
           const moleType = chooseMoleType();
@@ -340,7 +390,7 @@
       }, interval);
     }
     
-    // 難易度に応じたモグラタイプ選択（difficultの場合、大当たりは一回のみ）
+    // 難易度に応じたモグラタイプ選択（difficult は大当たりを 1 回のみ）
     function chooseMoleType() {
       let types = [];
       if (gameState.difficulty === 'normal') {
@@ -380,11 +430,11 @@
       mole.setAttribute('data-type', type);
       hole.appendChild(mole);
       
-      // タッチ／クリックでモグラを叩く
+      // タッチ／クリックで叩く
       mole.addEventListener('touchstart', moleHit);
       mole.addEventListener('click', moleHit);
       
-      // 指定時間経過で自動消去（未タッチ時）
+      // 自動消去（未タッチ時）
       setTimeout(() => {
         if (hole.contains(mole)) {
           hole.removeChild(mole);
@@ -392,7 +442,7 @@
       }, duration);
     }
     
-    // モグラをタッチした際の処理：効果反映＋浮動テキスト表示
+    // モグラタッチ時の処理：効果反映＋得点テキスト表示
     function moleHit(e) {
       e.stopPropagation();
       const mole = e.currentTarget;
@@ -406,25 +456,27 @@
         gameState.score += gameConfig.scores.miss;
       } else if (type === 'timePenalty') {
         gameState.timeRemaining = Math.max(0, gameState.timeRemaining - gameConfig.timePenaltyAmount);
-        document.getElementById('timeRemaining').textContent = gameState.timeRemaining;
+        timeRemainingEl.textContent = gameState.timeRemaining;
       } else if (type === 'jackpot') {
         gameState.score += gameConfig.scores.jackpot;
         gameState.jackpotUsed = true;
       }
       scoreEl.textContent = gameState.score;
       
-      // 効果音再生
-      hitSound.currentTime = 0;
-      hitSound.play();
+      // ヒット音（Web Audio API による生成）
+      playHitSound();
       
-      // 効果（得点・タイムマイナスなど）のテキストを浮かび上がらせる
+      // 効果テキスト表示
       const effectText = getEffectText(type);
       const scoreEffect = document.createElement('div');
       scoreEffect.classList.add('scoreEffect');
       scoreEffect.textContent = effectText;
+      scoreEffect.addEventListener('animationend', () => {
+        scoreEffect.remove();
+      });
       mole.parentElement.appendChild(scoreEffect);
       
-      // タッチされたらモグラは消去
+      // モグラ消去
       const parentHole = mole.parentElement;
       if (parentHole) {
         parentHole.removeChild(mole);
@@ -441,7 +493,7 @@
       return "";
     }
     
-    // レジェンド更新：プレイ画面下部に、使用されるモグラ効果をアイコン＋テキストで表示
+    // レジェンド更新：プレイ画面下部に効果をアイコン＋テキストで表示
     function updateLegend() {
       let types = [];
       if (gameState.difficulty === 'easy') {

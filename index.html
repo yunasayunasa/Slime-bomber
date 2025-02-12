@@ -88,8 +88,12 @@
       100% { transform: translateY(0); }
     }
     /* 各モグラタイプの仮の色分け */
-   .normal {
+  .normal {
   background-image: url('mole1.jpg');
+  background-repeat: no-repeat;
+  background-position: center center;
+  /* 必要に応じて background-size も調整 */
+  background-size: cover;
 }
     .bonus       { background-color: blue; }
     .miss        { background-color: red; }

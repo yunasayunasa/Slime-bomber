@@ -29,7 +29,6 @@
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      /* mole_back.jpg を背景として表示（GitHubにアップロードすれば反映） */
       background: url('mole_back.jpg') no-repeat center center;
       background-size: cover;
     }
@@ -252,8 +251,8 @@
       duration: 30, // 30秒
       moleTypes: {
         easy: ['normal'],
-        normal: ['normal', 'bonus', 'miss'],
-        difficult: ['normal', 'bonus', 'miss', 'timePenalty', 'jackpot']
+        normal: ['normal', 'normal', 'bonus', 'miss'],  // "miss" の出現頻度を下げる
+        difficult: ['normal', 'normal', 'normal', 'bonus', 'miss', 'timePenalty', 'jackpot']  // "miss" と "timePenalty" の出現頻度を下げる
       },
       scores: {
         normal: 10,

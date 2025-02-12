@@ -11,13 +11,14 @@
       margin: 0;
       padding: 0;
       overflow: hidden;
+      /* 画像が読み込めなかった場合の fallback 色 */
       background-color: #000;
     }
     body {
       font-family: 'Press Start 2P', monospace;
       color: #fff;
     }
-    /* 各画面共通 */
+    /* 各画面共通：背景画像 mole_back.jpg を適用 */
     .screen {
       position: absolute;
       top: 0;
@@ -28,16 +29,13 @@
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      background-color: #222;
-    }
-    /* タイトル画面：背景画像差し替え可能 */
-    #titleScreen {
-      background-image: url('title_bg.png');
+      /* mole_back.jpg を背景として表示（GitHubにアップロードすれば反映） */
+      background: url('mole_back.jpg') no-repeat center center;
       background-size: cover;
-      background-position: center;
     }
+    /* タイトル画面：ロゴサイズ調整 */
     #titleScreen h1 {
-      font-size: 72px;  /* ロゴを大きく */
+      font-size: 72px;
       letter-spacing: 4px;
       margin-bottom: 20px;
     }
@@ -66,7 +64,7 @@
       width: 90vw;
       height: 60vh;
     }
-    /* モグラ穴：丸い穴（後から画像に差し替え可） */
+    /* モグラ穴：丸い穴 */
     .moleHole {
       background-color: #555;
       border: 1px solid #333;
@@ -157,7 +155,7 @@
       height: 20px;
       border: 1px solid #fff;
     }
-    /* レジェンドにも同様の背景画像を設定（例として色分けではなく画像差し替え） */
+    /* レジェンドにも背景画像を設定 */
     .legendIcon.normal      { background-image: url('mole1.jpg'); background-size: cover; }
     .legendIcon.bonus       { background-image: url('mole2.jpg'); background-size: cover; }
     .legendIcon.miss        { background-image: url('mole3.jpg'); background-size: cover; }
@@ -214,48 +212,16 @@
       e.preventDefault();
     }, { passive: false });
     
-    /* ---------------
-       サウンド生成（Web Audio API 利用）
-       ---------------
-       ・AudioContext を用いて、BGMおよびヒット音を生成します。
-       ・BGMは単純なループメロディ、ヒット音は短いビープです。
-    */
+    /* -------------------------------
+       サウンド関連
+       ・BGMは外部ファイル "mole_bgm.mp3" を使用（ループ再生）
+       ・ヒット音は従来のWeb Audio APIによる生成
+    --------------------------------- */
+    const bgmAudio = new Audio("mole_bgm.mp3");
+    bgmAudio.loop = true;
+    
+    // ヒット音用のAudioContext（既存の方法）
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    let bgmPlaying = false;
-    let bgmIndex = 0;
-    // BGM用のシンプルなメロディ（周波数は 8 ビット風）
-    const bgmNotes = [
-      {freq: 261.63, duration: 0.4},  // C4
-      {freq: 293.66, duration: 0.4},  // D4
-      {freq: 329.63, duration: 0.4},  // E4
-      {freq: 349.23, duration: 0.4}   // F4
-    ];
-    
-    function playNextBgmNote() {
-      if (!bgmPlaying) return;
-      const note = bgmNotes[bgmIndex];
-      const osc = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
-      osc.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-      osc.frequency.value = note.freq;
-      osc.type = "square";
-      gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
-      osc.start();
-      osc.stop(audioCtx.currentTime + note.duration);
-      bgmIndex = (bgmIndex + 1) % bgmNotes.length;
-      setTimeout(playNextBgmNote, note.duration * 1000);
-    }
-    
-    function startBGM() {
-      bgmPlaying = true;
-      bgmIndex = 0;
-      playNextBgmNote();
-    }
-    
-    function stopBGM() {
-      bgmPlaying = false;
-    }
     
     function playHitSound() {
       const osc = audioCtx.createOscillator();
@@ -267,6 +233,16 @@
       gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
       osc.start();
       osc.stop(audioCtx.currentTime + 0.1);
+    }
+    
+    // BGM再生開始・停止関数
+    function startBGM() {
+      bgmAudio.play();
+    }
+    
+    function stopBGM() {
+      bgmAudio.pause();
+      bgmAudio.currentTime = 0;
     }
     
     /* ----------------------
@@ -322,7 +298,7 @@
     
     // タイトル画面 → 難易度選択画面へ
     startButton.addEventListener('click', () => {
-      // ユーザー操作で AudioContext 再開
+      // ユーザー操作で AudioContext 再開（ヒット音用）
       if (audioCtx.state === 'suspended') {
         audioCtx.resume();
       }
@@ -354,7 +330,7 @@
       scoreEl.textContent = gameState.score;
       
       gameScreen.style.display = 'flex';
-      // BGM開始（Web Audio API により生成）
+      // BGM開始（外部ファイル mole_bgm.mp3 を再生）
       startBGM();
       
       // レジェンド更新
@@ -388,6 +364,7 @@
       gameScreen.style.display = 'none';
       finalScoreEl.textContent = gameState.score;
       gameOverScreen.style.display = 'flex';
+      // BGM停止
       stopBGM();
     }
     
@@ -489,7 +466,7 @@
       }
       scoreEl.textContent = gameState.score;
       
-      // ヒット音（Web Audio API による生成）
+      // ヒット音再生
       playHitSound();
       
       // 効果テキスト表示
